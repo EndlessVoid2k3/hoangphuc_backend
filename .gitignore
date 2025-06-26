@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Django specific
+*.log
+*.pot
+*.pyc
+*.sqlite3
+db.sqlite3
+
+# Media / static files
+/media/
+/staticfiles/
+/static/
+
+# Python virtual environment
+venv/
+env/
+
+# VS Code settings
+.vscode/
+*.code-workspace
+
+# Environment variables
+.env
+.env.*
+
+# Mac/Windows system files
+.DS_Store
+Thumbs.db
+
+# Migrations (optional, keep if you want to version schema)
+**/migrations/*.pyc
+**/migrations/__pycache__/
+**/migrations/*.py
+!**/migrations/__init__.py
+
+# Render build output (optional)
+build/
