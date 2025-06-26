@@ -1,7 +1,7 @@
 import csv
 from django.core.management.base import BaseCommand
 from scores.models import Student, SubjectScore
-from utils.subjects import Subject
+from scores.utils.subjects import Subject
 from django.db import transaction
 
 class Command(BaseCommand):
