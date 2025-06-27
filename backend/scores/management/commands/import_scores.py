@@ -1,59 +1,56 @@
-import pandas as pd
-from tqdm import tqdm
+import csv
 from django.core.management.base import BaseCommand
 from scores.models import Student, SubjectScore
+from scores.utils.subjects import Subject
 from django.db import transaction
 
 class Command(BaseCommand):
+
+    BATCH_SIZE = 500
+
     def handle(self, *args, **kwargs):
-        # Step 1: Load CSV with Pandas
-        df = pd.read_csv("diem_thi_thpt_2024.csv")
-        subject_cols = [col for col in df.columns if col not in ["sbd", "ma_ngoai_ngu"]]
+        path = "diem_thi_thpt_2024.csv"
+        created_students = []
+        created_scores = []
 
-        # Step 2: Bulk insert unique students
-        unique_sbds = df["sbd"].dropna().astype(str).unique()
-        existing_sbds = set(Student.objects.filter(sbd__in=unique_sbds).values_list("sbd", flat=True))
-        new_students = [Student(sbd=sbd) for sbd in unique_sbds if sbd not in existing_sbds]
+        with open(path, encoding='utf-8') as f:
+            reader = csv.DictReader(f)
 
-        self.stdout.write(f"Inserting {len(new_students)} new students...")
-        Student.objects.bulk_create(new_students, ignore_conflicts=True)
+            for row_count, row in enumerate(reader, start=1):
+                sbd = row.get("sbd")
+                if not sbd:
+                    continue
 
-        # Step 3: Fetch full student map (sbd → object)
-        student_map = {
-            s.sbd: s for s in Student.objects.filter(sbd__in=unique_sbds)
-        }
+                student = Student(sbd=sbd)
+                created_students.append(student)
 
-        # Step 4: Build and bulk insert subject scores
-        scores_to_create = []
-        chunk_size = 10000
+                for subject in Subject.all_keys():
+                    raw = row.get(subject)
+                    if raw:
+                        try:
+                            score = float(raw)
+                            created_scores.append((sbd, subject, score))
+                        except ValueError:
+                            self.stderr.write(f"Invalid score {raw} for {sbd} - {subject}")
 
-        self.stdout.write("Preparing subject scores...")
-        for _, row in tqdm(df.iterrows(), total=len(df)):
-            sbd = str(row["sbd"])
-            student = student_map.get(sbd)
-            if not student:
-                continue
+                # Commit every BATCH_SIZE rows
+                if row_count % self.BATCH_SIZE == 0:
+                    self._commit_batch(created_students, created_scores)
+                    created_students.clear()
+                    created_scores.clear()
+                    self.stdout.write(f"Processed {row_count} rows...")
 
-            for subject in subject_cols:
-                raw_score = row.get(subject)
-                if pd.notnull(raw_score):
-                    try:
-                        score = float(raw_score)
-                        scores_to_create.append(
-                            SubjectScore(student=student, subject=subject, score=score)
-                        )
-                    except ValueError:
-                        continue  # invalid score string
+            # Final batch
+            self._commit_batch(created_students, created_scores)
+            self.stdout.write(self.style.SUCCESS("All rows imported successfully."))
 
-            # Chunk insert every 10k scores
-            if len(scores_to_create) >= chunk_size:
-                with transaction.atomic():
-                    SubjectScore.objects.bulk_create(scores_to_create, ignore_conflicts=True)
-                scores_to_create = []
+    def _commit_batch(self, student_batch, score_batch):
+        student_objs = Student.objects.bulk_create(student_batch, ignore_conflicts=True, batch_size=self.BATCH_SIZE)
 
-        # Insert any remaining scores
-        if scores_to_create:
-            with transaction.atomic():
-                SubjectScore.objects.bulk_create(scores_to_create, ignore_conflicts=True)
-
-        self.stdout.write(self.style.SUCCESS("Import complete."))
+        sbd_to_student = {sbd: Student.objects.get(sbd=sbd) for sbd in [s.sbd for s in student_batch]}
+        subject_objs = [
+            SubjectScore(student=sbd_to_student[sbd], subject=subj, score=score)
+            for sbd, subj, score in score_batch
+            if sbd in sbd_to_student
+        ]
+        SubjectScore.objects.bulk_create(subject_objs, batch_size=self.BATCH_SIZE)
