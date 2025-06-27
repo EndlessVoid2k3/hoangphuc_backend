@@ -43,6 +43,11 @@ INSTALLED_APPS = [
     'scores',
 ]
 
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  
+]
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -92,7 +97,10 @@ DATABASES = {
         'USER': os.environ.get('POSTGRES_USER'),
         'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
         'HOST': os.environ.get('POSTGRES_HOST'),
-        'PORT': '5432'
+        'PORT': '5432',
+        'OPTIONS': {
+            'sslmode': 'require',
+        },
     }
 }
 

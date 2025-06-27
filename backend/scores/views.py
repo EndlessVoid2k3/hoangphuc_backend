@@ -11,7 +11,6 @@ from django.views.decorators.cache import cache_page
 
 class ScoreBySBDView(APIView):
     def get(self, request, sbd):
-        # Prefetch all subject scores in one query
         student = get_object_or_404(Student.objects.prefetch_related("scores"), sbd=sbd)
         serializer = StudentScoreSerializer(student)
         return Response(serializer.data)
@@ -20,7 +19,6 @@ class ScoreBySBDView(APIView):
 class ReportScoresView(APIView):
     def get(self, request):
         result = {}
-        # Use one single DB query instead of one per filter
         for subject in Subject.all_keys():
             qs = SubjectScore.objects.filter(subject=subject).values('score')
             result[subject] = {
@@ -36,7 +34,6 @@ class Top10GroupAView(APIView):
     def get(self, request):
         group_a = ["toan", "vat_li", "hoa_hoc"]
 
-        # Prefetch all subject scores to avoid multiple queries
         students = Student.objects.only("sbd").prefetch_related(
             Prefetch(
                 "scores",
@@ -49,9 +46,14 @@ class Top10GroupAView(APIView):
             scores = {s.subject: s.score for s in student.scores.all()}
             if all(sub in scores for sub in group_a):
                 total = sum(scores[sub] for sub in group_a)
-                result.append({"sbd": student.sbd, "total": round(total, 2)})
+                result.append({
+                    "sbd": student.sbd,
+                    "toan": scores["toan"],
+                    "vat_li": scores["vat_li"],
+                    "hoa_hoc": scores["hoa_hoc"],
+                    "total": round(total, 2)
+                })
 
-
-        # Sort once, not in every iteration
         top10 = sorted(result, key=lambda x: x["total"], reverse=True)[:10]
         return Response(top10)
+
