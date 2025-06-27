@@ -6,7 +6,7 @@ from django.db import transaction
 
 class Command(BaseCommand):
 
-    BATCH_SIZE = 500
+    BATCH_SIZE = 10000
 
     def handle(self, *args, **kwargs):
         path = "diem_thi_thpt_2024.csv"
