@@ -34,26 +34,34 @@ class Top10GroupAView(APIView):
     def get(self, request):
         group_a = ["toan", "vat_li", "hoa_hoc"]
 
-        students = Student.objects.only("sbd").prefetch_related(
-            Prefetch(
-                "scores",
-                queryset=SubjectScore.objects.filter(subject__in=group_a).only("subject", "score", "student")
+        # Get students who have all 3 subjects
+        students = (
+            Student.objects.annotate(
+                toan_score=Sum('scores__score', filter=Q(scores__subject='toan')),
+                vat_li_score=Sum('scores__score', filter=Q(scores__subject='vat_li')),
+                hoa_hoc_score=Sum('scores__score', filter=Q(scores__subject='hoa_hoc')),
+                subject_count=Count('scores__subject', filter=Q(scores__subject__in=group_a), distinct=True),
             )
+            .filter(subject_count=3)  # only those who have all 3
+            .annotate(
+                total_score=F('toan_score') + F('vat_li_score') + F('hoa_hoc_score')
+            )
+            .values(
+                'sbd', 'toan_score', 'vat_li_score', 'hoa_hoc_score', 'total_score'
+            )
+            .order_by('-total_score')[:10]
         )
 
-        result = []
-        for student in students:
-            scores = {s.subject: s.score for s in student.scores.all()}
-            if all(sub in scores for sub in group_a):
-                total = sum(scores[sub] for sub in group_a)
-                result.append({
-                    "sbd": student.sbd,
-                    "toan": scores["toan"],
-                    "vat_li": scores["vat_li"],
-                    "hoa_hoc": scores["hoa_hoc"],
-                    "total": round(total, 2)
-                })
+        # Format response
+        result = [
+            {
+                "sbd": s["sbd"],
+                "toan": s["toan_score"],
+                "vat_li": s["vat_li_score"],
+                "hoa_hoc": s["hoa_hoc_score"],
+                "total": s["total_score"], 
+            }
+            for s in students
+        ]
 
-        top10 = sorted(result, key=lambda x: x["total"], reverse=True)[:10]
-        return Response(top10)
-
+        return Response(result)
